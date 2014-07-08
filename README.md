@@ -15,3 +15,4 @@ Goals
 * unit tested where possible
 * coffeelint / jshint to an acceptable standard
 * support amd / require / bower / etc
+* support all modern browers - chrome / firefox / IE9+
