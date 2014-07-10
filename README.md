@@ -1,6 +1,6 @@
 dropsort.js
 ===========
-A drag/drop/sortable replacement to jQuery UI
+A drag/drop/sortable replacement to jQuery UI.
 
 Progress Plunk
 ==============
@@ -10,7 +10,7 @@ Feel free to discuss any aspect of the plunk in an issue.
 Goals
 =====
 * support touch and mouse drags simulateously (some devices have both a mouse and touch screen)
-* all calls should be chainable
+* all calls should be chainable (where applicable)
 * be easily extensible and pluggable into environments like jQuery, AngularJS, and knockout.js
 * support drag, drop, and sortable controls
 * draggable controls should be able to auto-expand in the dragged direction, and containers should be flexible, ie, if I have solid bounds on top, left, and right, but nothing specified for the bottom, the container should expand downwards
@@ -22,3 +22,4 @@ Goals
 * support all modern browers - chrome / firefox / IE9+
 * Works in scrollable modal boxes like fancybox (so can't have position calculations tied totally to the window, has to be aware of a box that it's in and scroll the box if the element gets near the top/bottom/sides)
 * be compatible with HTML5 drag & drop ???
+* the draggable objects should stay in sync with the mouse cursor where possible. when moving out of bounds and then back in, the item should be at the edge of the mouse pointer, not hundreds of pixels away
