@@ -9,7 +9,7 @@ Feel free to discuss any aspect of the plunk in an issue.
 
 Goals
 =====
-* support touch and mouse drags
+* support touch and mouse drags simulateously (some devices have both a mouse and touch screen)
 * all calls should be chainable
 * be easily extensible and pluggable into environments like jQuery, AngularJS, and knockout.js
 * support drag, drop, and sortable controls
