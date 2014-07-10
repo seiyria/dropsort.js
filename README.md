@@ -21,3 +21,4 @@ Goals
 * support amd / require / bower / etc
 * support all modern browers - chrome / firefox / IE9+
 * Works in scrollable modal boxes like fancybox (so can't have position calculations tied totally to the window, has to be aware of a box that it's in and scroll the box if the element gets near the top/bottom/sides)
+* be compatible with HTML5 drag & drop ???
