@@ -1,7 +1,4 @@
 
-# Lots of parameters could be interpreted as either function or object or w/e
-#   Due to _.result being fabulous
-
 class Action
   constructor: (@type, @element) ->
     @init()
@@ -37,27 +34,35 @@ class MouseAction extends Action
     super 'mouse', @element
     
 class DropSort
+  errorMsgs = 
+    noElement: 'You have to specify an element to attach DropSort to'
+    staticPos: 'You cannot use DropSort on an element with position: static set'
   constructor: (@element, optionsSpecified = {}) ->
     
-    throw new Error('You have to specify an element to attach DropSort to') if not @element
-    throw new Error('You cannot use DropSort on an element with position: static set') if @getStyle(@element, 'position') is 'static'
+    throw new Error errorMsgs.noElement if not @element
+    throw new Error errorMsgs.staticPos if @getStyle(@element, 'position') is 'static'
     
     @options = _.defaults optionsSpecified,
       touchEnabled: 'ontouchstart' in window
       
-      # string or function (???)
+      # string or function
       dragClass: 'ds-drag'
-      anchor: @element
-      
+
       dragOpts:
-        # either an array, a selector, or a function (???)
+        # either a bool or a function
+        autoScroll: true
+        
+        # either an int or a function
+        autoScrollSpeed: 20
+        
+        # either an array, a selector, or a function
         anchorElements: []
         
         container:
-          # either 'parent' or 'window' or a function (???)
+          # either 'parent' or 'window' or an element or a function (-> element)
           type: 'parent'
           
-          # object or function (???)
+          # object or function that returns an object with this structure
           box:
             bottom: null
             right: null
@@ -70,13 +75,15 @@ class DropSort
     @addBinding()
     @mouse = new MouseAction @element
 
-    # need some form of esay way to determine what to call
+    # need some form of easy way to determine what to call
     @setupDrag() 
-
+  
   repositionItem: (event) ->
 
     offsetX = event.pageX
     offsetY = event.pageY
+    mouseX = event.clientX
+    mouseY = event.clientY
     
     if not (@dragStartPosition._xDiff or @dragStartPosition._yDiff)
       @dragStartPosition._xDiff = @dragStartPosition.left - offsetX
@@ -84,10 +91,72 @@ class DropSort
       
     newX = offsetX + @dragStartPosition._xDiff
     newY = offsetY + @dragStartPosition._yDiff
+    
+    if (_.result @options?.dragOpts, 'autoScroll') and (autoScrollSpeed = _.result @options?.dragOpts, 'autoScrollSpeed')
+      windowSize = @getWindowSize()
       
-    #console.log @dragStartPosition
+      # todo AUTOSCROLL THIS
+      #greaterX = => mouseX >= windowSize.x
+      greaterY = => mouseY >= windowSize.y
+      greaterX = => mouseX >= windowSize.x
+      lesserY = => mouseY <= 0
+      lesserX = => mouseX <= 0
       
+
+      if greaterY()
+
+        if not (greaterY())
+          return
+            
+        if greaterY()
+          window.scrollIntervalGreaterY = setInterval( ->
+            window.scrollBy( 0,10 );
+          ,15);
+          
+      else 
+        clearInterval(window.scrollIntervalGreaterY);
+      
+      if greaterX()
+
+        if not (greaterX())
+          return
+            
+        if greaterX()
+          window.scrollIntervalGreaterX = setInterval( ->
+            window.scrollBy( 10,0 );
+          ,15);
+          
+      else 
+        clearInterval(window.scrollIntervalGreaterX);
+      
+      if lesserY()
+
+        if not (lesserY())
+          return
+            
+        if lesserY()
+          window.scrollIntervalLesserY = setInterval( ->
+            window.scrollBy( 0,-10 );
+          ,15);
+          
+      else 
+        clearInterval(window.scrollIntervalLesserY);
+      
+      if lesserX()
+
+        if not (lesserX())
+          return
+            
+        if lesserX()
+          window.scrollIntervalLesserX = setInterval( ->
+            window.scrollBy( -10,0 );
+          ,15);
+          
+      else 
+        clearInterval(window.scrollIntervalLesserX);
+        
     #do bounds checking here when that option is implemented
+    #move other items where applicable
     
     @element.style.left = "#{newX}px"
     @element.style.top = "#{newY}px"
@@ -131,6 +200,16 @@ DropSort::getWindowSize = ->
     x: window.innerWidth or de.clientWidth or body.clientWidth
     y: window.innerHeight or de.clientHeight or body.clientHeight
   }
+  
+DropSort::scrollToTop = (scrollDuration) ->
+            scrollStep = -window.scrollY / (scrollDuration / 15)
+            scrollInterval = setInterval( ->
+              if ( window.scrollY != 0 ) 
+                window.scrollBy( 0, scrollStep );
+        
+              else clearInterval(scrollInterval); 
+            ,15);
+
 
 # Get a style property from an element
 DropSort::getStyle = (elem, prop) ->
@@ -200,7 +279,6 @@ DropSort::getPosition = (event) ->
   de = document.documentElement
   return {x: event.clientX + db.scrollLeft + de.scrollLeft, y: event.pageY + db.scrollTop + de.scrollTop} if event.clientX or event.clientY
   {x: 0, y: 0}
-
 
 # Export it to the appropriate place
 root = exports ? @
