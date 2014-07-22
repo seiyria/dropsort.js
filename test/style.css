@@ -1,9 +1,32 @@
+body {
+  margin: 0!important;
+  overflow: scroll;
+}
 
-#dragMe {
+.dragme, .dragme-contained, .dragme-lookalike {
   position: relative;
   width: 100px;
   height: 100px;
   border: 1px solid #000;
+  z-index: 30;
+}
+
+.gets-dragged {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  background-color: #af0;
+}
+
+#dragMeContainer {
+  border: 1px solid #f00;
+  height: 300px;
+  width: 300px;
+  z-index: 100;
+}
+
+.ds-drag {
+  background-color: #ccc;
 }
 
 #dropMe {

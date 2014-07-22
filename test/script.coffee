@@ -1,5 +1,9 @@
-x = new DropSort document.getElementById 'dragMe'
-#x.mouse.on 'move'
-#yx = new DropSort document.getElementById 'dragMe'
-#console.log document.getElementsByTagName('body')[0]
-#console.log DropSort::getPos document.getElementsByTagName('body')[0]
+nodes = document.querySelectorAll ".dragme-contained"
+_.each nodes, (node) ->
+  x = new DropSort node, dragContainerType: 'parent'
+  
+nodes = document.querySelectorAll ".dragme"
+_.each nodes, (node) ->
+  x = new DropSort node, dragAnchorElements: ".gets-dragged"
+
+#x = new DropSort document.getElementById 'dragMeAlso'

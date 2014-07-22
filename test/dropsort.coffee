@@ -37,10 +37,18 @@ class DropSort
   errorMsgs = 
     noElement: 'You have to specify an element to attach DropSort to'
     staticPos: 'You cannot use DropSort on an element with position: static set'
-  constructor: (@element, optionsSpecified = {}) ->
+    invalidEl: 'Could not get the container for element'
+    multiBind: 'You cannot bind to the same element multiple times'
+    gridDimen: 'Your grid dimensions are invalid. They must be integers greater than 1.'
+    badHelper: 'You must specify a valid helper (it must be a function that returns a DOMElement, contain "clone" or "original").'
     
+  constructor: (@element, optionsSpecified = {}) ->
+
     throw new Error errorMsgs.noElement if not @element
     throw new Error errorMsgs.staticPos if @getStyle(@element, 'position') is 'static'
+    
+    
+    ## TODO MAKE THE HANDLE OPTION A THING
     
     @options = _.defaults optionsSpecified,
       touchEnabled: 'ontouchstart' in window
@@ -48,118 +56,189 @@ class DropSort
       # string or function
       dragClass: 'ds-drag'
 
-      dragOpts:
-        # either a bool or a function
-        autoScroll: true
-        
-        # either an int or a function
-        autoScrollSpeed: 20
-        
-        # either an array, a selector, or a function
-        anchorElements: []
-        
-        container:
-          # either 'parent' or 'window' or an element or a function (-> element)
-          type: 'parent'
-          
-          # object or function that returns an object with this structure
-          box:
-            bottom: null
-            right: null
-            left: null
-            top: null
-            
-      dropOpts: {}
-      sortOpts: {}
+      # either a bool or a function -> bool
+      dragAutoScroll: true
       
-    @addBinding()
+      # either an int or a function -> int
+      dragAutoScrollSpeed: 10
+      
+      # either an int or a function -> int
+      # does not currently work well with high numbers
+      # it may work better if @element is manually repositioned after meeting minDragDistance
+      minDragDistance: 0
+      
+      # either original, clone, anchor, original anchor, clone anchor, function -> element
+      dragHelper: "original anchor"
+      
+      # either a class name (no .), or a function -> class name
+      dragHandleClassName: ""
+      
+      # either a bool or a function -> bool
+      dragDisabled: false
+      
+      # either a number or a function -> number
+      dragZIndex: 10
+      
+      # either a string or a function -> string
+      dragAxis: "both"
+      
+      # either an array or function -> array
+      dragGrid: [1, 1]
+      
+      # either an array, a selector, or a function -> array of nodes
+      dragAnchorElements: []
+      
+      # either 'parent' or null or an element or a function (-> element)
+      dragContainerType: null
+      
+      # object
+      dragContainerBox:
+        bottom: null
+        right: null
+        left: null
+        top: null
+
+    do @doInitialVariableCalculations
+    do @addBinding
     @mouse = new MouseAction @element
 
     # need some form of easy way to determine what to call
-    @setupDrag() 
-  
-  repositionItem: (event) ->
+    do @setupDrag
+    
+  doInitialVariableCalculations: ->
+    @getContainerBoundingBox()
+    @checkGrid()
+    @setAxis()
+    @setBaseZIndex()
+    @checkIfHelperIsValid()
+    
+  checkIfHelperIsValid: ->
+    helper = _.result @options, 'dragHelper'
+
+    throw new Error errorMsgs.badHelper if (not _.isElement helper) and ((helper.indexOf 'clone') is -1) and ((helper.indexOf 'original') is -1)
+    
+  setBaseZIndex: ->
+    @element._zIndex = @getStyle @element, 'z-index'
+
+  setAxis: ->
+    axis = _.result @options, 'dragAxis'
+    axis = 'both' if not axis
+    @options.dragAxis = axis
+    
+  checkGrid: ->
+    grid = _.result @options, 'dragGrid'
+    
+    if not grid
+      grid = [1, 1]
+      
+    if grid[0] < 1 or not @divisibleBy grid[0] or grid[1] < 1 or not @divisibleBy grid[1]
+      throw new Error errorMsgs.gridDimen
+      
+    @options.dragGrid = grid
+      
+  getContainerBoundingBox: ->
+    type = _.result @options, 'dragContainerType'
+    return if type is null
+    
+    if type is 'parent'
+      type = @element.parentNode
+      
+    if  _.isElement type
+      @options.dragContainerBox = @getBoundingBoxFor type
+      
+    else
+      throw new Error errorMsgs.invalidEl
+      
+  repositionItem: (event, repositionMe = @element) ->
+    
+    grid = @options.dragGrid
+    axis = @options.dragAxis
 
     offsetX = event.pageX
     offsetY = event.pageY
     mouseX = event.clientX
     mouseY = event.clientY
-    
+
     if not (@dragStartPosition._xDiff or @dragStartPosition._yDiff)
       @dragStartPosition._xDiff = @dragStartPosition.left - offsetX
       @dragStartPosition._yDiff = @dragStartPosition.top - offsetY
-      
+
     newX = offsetX + @dragStartPosition._xDiff
     newY = offsetY + @dragStartPosition._yDiff
-    
-    if (_.result @options?.dragOpts, 'autoScroll') and (autoScrollSpeed = _.result @options?.dragOpts, 'autoScrollSpeed')
+
+    if (_.result @options, 'dragAutoScroll') and (autoScrollSpeed = _.result @options, 'dragAutoScrollSpeed')
       windowSize = @getWindowSize()
-      
-      # todo AUTOSCROLL THIS
-      #greaterX = => mouseX >= windowSize.x
-      greaterY = => mouseY >= windowSize.y
-      greaterX = => mouseX >= windowSize.x
-      lesserY = => mouseY <= 0
-      lesserX = => mouseX <= 0
-      
 
-      if greaterY()
-
-        if not (greaterY())
-          return
-            
-        if greaterY()
-          window.scrollIntervalGreaterY = setInterval( ->
-            window.scrollBy( 0,10 );
-          ,15);
-          
-      else 
-        clearInterval(window.scrollIntervalGreaterY);
-      
-      if greaterX()
-
-        if not (greaterX())
-          return
-            
-        if greaterX()
-          window.scrollIntervalGreaterX = setInterval( ->
-            window.scrollBy( 10,0 );
-          ,15);
-          
-      else 
-        clearInterval(window.scrollIntervalGreaterX);
-      
-      if lesserY()
-
-        if not (lesserY())
-          return
-            
-        if lesserY()
-          window.scrollIntervalLesserY = setInterval( ->
-            window.scrollBy( 0,-10 );
-          ,15);
-          
-      else 
-        clearInterval(window.scrollIntervalLesserY);
-      
-      if lesserX()
-
-        if not (lesserX())
-          return
-            
-        if lesserX()
-          window.scrollIntervalLesserX = setInterval( ->
-            window.scrollBy( -10,0 );
-          ,15);
-          
-      else 
-        clearInterval(window.scrollIntervalLesserX);
-        
-    #do bounds checking here when that option is implemented
-    #move other items where applicable
+      greaterY = -> mouseY >= windowSize.y
+      greaterX = -> mouseX >= windowSize.x
+      lesserY = -> mouseY <= 0
+      lesserX = -> mouseX <= 0
     
-    @element.style.left = "#{newX}px"
-    @element.style.top = "#{newY}px"
+    
+      if greaterY()
+        window.scrollIntervalGreaterY = setInterval ->
+          window.scrollBy 0, autoScrollSpeed
+        , 15
+         
+      else 
+        clearInterval window.scrollIntervalGreaterY
+    
+      if greaterX()
+        window.scrollIntervalGreaterX = setInterval ->
+          window.scrollBy autoScrollSpeed, 0
+        , 15
+         
+      else 
+        clearInterval window.scrollIntervalGreaterX
+    
+      if lesserY()
+        window.scrollIntervalLesserY = setInterval ->
+          window.scrollBy 0, -autoScrollSpeed
+        , 15
+         
+      else 
+        clearInterval window.scrollIntervalLesserY
+    
+      if lesserX()
+        window.scrollIntervalLesserX = setInterval ->
+          window.scrollBy -autoScrollSpeed, 0
+        ,15
+         
+      else 
+        clearInterval window.scrollIntervalLesserX
+     
+    
+    boundingBox = @options.dragContainerBox
+
+    containment = 
+      left: newX
+      top: newY
+      right: newX + repositionMe.offsetWidth
+      bottom: newY + repositionMe.offsetHeight
+      offsetWidth: repositionMe.offsetWidth
+      offsetHeight: repositionMe.offsetHeight
+      
+    newElementBox = @isElementContainedChangePos containment, boundingBox
+    
+    elementBoundingBox = @getBoundingBoxFor repositionMe
+    didMove = no
+
+    if (@divisibleBy newElementBox.left, grid[0]) and axis in ['both', 'x']
+      repositionMe.style.left = "#{newElementBox.left}px"
+      didMove = yes
+      
+    if (@divisibleBy newElementBox.top, grid[1]) and axis in ['both', 'y']
+      repositionMe.style.top = "#{newElementBox.top}px" 
+      didMove = yes
+      
+    if didMove and (@options.dragHelper.indexOf 'anchor') isnt -1
+      xDiff = newElementBox.left - elementBoundingBox.left
+      yDiff = newElementBox.top - elementBoundingBox.top
+      
+      _.each (@figureOutAnchors repositionMe, @options.dragAnchorElements), (element) =>
+        box = @getBoundingBoxFor element
+        element.style.left = "#{box.left+xDiff}px"
+        element.style.top = "#{box.top+yDiff}px"
     
     @stopEvent event
     
@@ -167,30 +246,95 @@ class DropSort
   setupDrag: ->
     target = if _.result @options, 'touchEnabled' then @element else document
     @mouse.on 'down', @_down = (e) =>
+      #left mouse click, or a touch
       return if not ((window.event and e.button is 1) or e.button is 0 or _.result @options, 'touchEvents')
+      return if _.result @options, 'dragDisabled'
+      
+      handle = _.result @options, 'dragHandleClassName'
+      return if handle and ((@getClasses e.srcElement).indexOf handle) is -1
+        
       @stopEvent e
+      @element.style.zIndex = _.result @options, 'dragZIndex'
       @addClass @element, _.result @options, 'dragClass'
       @dragging = true
-      @dragStartPosition = @getElPosAndOffset @element
+      @dragElement = @getDragItem e
+      @dragStartPosition = @getBoundingBoxFor @element
       @dragStartPosition._origMouseX = e.pageX
       @dragStartPosition._origMouseY = e.pageY
-
-    @mouse.on 'up', @_up = (e) => 
+      
+    @mouse.on 'up', @_up = (e) =>
+      return if not @dragging # don't trigger other DropSorts
+      @element.style.zIndex = @element._zIndex
       @removeClass @element, _.result @options, 'dragClass'
       @dragging = false
       delete @dragStartPosition
+      
+      if @element isnt @dragElement
+        @element.parentNode.removeChild @dragElement
+        @element.style.left = @dragElement.style.left
+        @element.style.top = @dragElement.style.top
+      
       @mouse.off 'move', @_move
     , target
       
     @mouse.on 'move', @_move = (e) =>
       return if not @dragging
-      @repositionItem e
+      minDragDistance = _.result @options, 'minDragDistance'
+      return if (Math.abs @dragStartPosition._origMouseX-e.x) < minDragDistance or
+                (Math.abs @dragStartPosition._origMouseY-e.y) < minDragDistance
+      @repositionItem e, @dragElement
     , target
     
   addBinding: ->
-    throw new Error('You cannot bind on the same element twice') if @element.bindingId
+    throw new Error errorMsgs.multiBind if @element.bindingId
     @element.bindingId = _.uniqueId 'ds-'
-    @bindings[@element.bindingId] = @element
+    #@bindings[@element.bindingId] = @element
+    
+  getDragItem: (e) ->
+    if (@options.dragHelper.indexOf "clone") isnt -1
+      clone = @element.cloneNode true
+      box = @getBoundingBoxFor @element
+      @element.parentNode.insertBefore clone, @element
+      @element.style.left = clone.style.left = box.offsetX+'px'
+      @element.style.top = clone.style.top = box.offsetY+'px'
+      @element.style.position = clone.style.position = 'absolute'
+      
+      return clone
+      
+    return @element if (@options.dragHelper.indexOf "original") isnt -1
+      
+DropSort::figureOutAnchors = (element, anchorOpt) ->
+  anchors = []
+  anchors.push anchorOpt if _.isElement anchorOpt
+  anchors = document.querySelectorAll anchorOpt if _.isString anchorOpt
+  anchors = anchorOpt if _.isArray anchorOpt
+  anchors
+    
+DropSort::divisibleBy = (num, divisor = 1) ->
+  num % divisor is 0
+  
+DropSort::isElementContainedChangePos = (element, container) -> 
+
+  if (_.isNumber container.left) and (element.left < container.left)
+    element.left = container.left
+    
+  if (_.isNumber container.top) and element.top < container.top
+    element.top = container.top
+    
+  if (_.isNumber container.rightCalc) and element.right > container.rightCalc
+    element.left = container.rightCalc-element.offsetWidth
+    
+  if (_.isNumber container.bottomCalc) and element.bottom > container.bottomCalc
+    element.top = container.bottomCalc-element.offsetHeight
+    
+  element
+
+#check if element is contained
+DropSort::isElementContainedBy = (element, container) ->
+  (container.bottom and element.bottom <= container.bottom) and
+  (container.right and element.right <= container.right) and
+  (container.left and element.left >= container.left) and
+  (container.top and element.top >= container.top)
   
 # Get the window size 
 DropSort::getWindowSize = ->
@@ -200,16 +344,6 @@ DropSort::getWindowSize = ->
     x: window.innerWidth or de.clientWidth or body.clientWidth
     y: window.innerHeight or de.clientHeight or body.clientHeight
   }
-  
-DropSort::scrollToTop = (scrollDuration) ->
-            scrollStep = -window.scrollY / (scrollDuration / 15)
-            scrollInterval = setInterval( ->
-              if ( window.scrollY != 0 ) 
-                window.scrollBy( 0, scrollStep );
-        
-              else clearInterval(scrollInterval); 
-            ,15);
-
 
 # Get a style property from an element
 DropSort::getStyle = (elem, prop) ->
@@ -218,17 +352,22 @@ DropSort::getStyle = (elem, prop) ->
   return elem.style[prop] if elem.style
 
 # Get the bounding box for an element
-DropSort::getElPosAndOffset = (elem) ->
+DropSort::getBoundingBoxFor = (elem) ->
   base =
     offsetX: 0
     offsetY: 0
+    offsetHeight: elem.offsetHeight
+    offsetWidth: elem.offsetWidth
     bottom: parseFloat @getStyle elem, 'bottom'
     right: parseFloat @getStyle elem, 'right'
     left: parseFloat @getStyle elem, 'left'
     top: parseFloat @getStyle elem, 'top'
   
+  base.bottomCalc = elem.offsetHeight
+  base.rightCalc = elem.offsetWidth
+  
   for attr, val of base
-    base[attr] = 0if _.isNaN val
+    base[attr] = 0 if _.isNaN val
     
   if elem.offsetParent
     add = ->
@@ -240,13 +379,16 @@ DropSort::getElPosAndOffset = (elem) ->
   base
   
 # map of _.uniqueId to DOMElement
-DropSort::bindings = {}
+#DropSort::bindings = {}
 
 # stop an event by whatever means it has available
 DropSort::stopEvent = (event) ->
   event.preventDefault() if event.preventDefault
   event.stopPropagation() if event.stopPropagation
   event.returnvalue = false
+  
+DropSort::getClasses = (el) ->
+  el.className
 
 # add a class to an element
 DropSort::addClass = (el, newClass) ->
