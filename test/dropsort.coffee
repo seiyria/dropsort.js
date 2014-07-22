@@ -63,6 +63,9 @@ class DropSort
       dragAutoScrollSpeed: 10
       
       # either an int or a function -> int
+      dragScrollSensitivity: 100
+      
+      # either an int or a function -> int
       # does not currently work well with high numbers
       # it may work better if @element is manually repositioned after meeting minDragDistance
       minDragDistance: 0
@@ -168,11 +171,12 @@ class DropSort
 
     if (_.result @options, 'dragAutoScroll') and (autoScrollSpeed = _.result @options, 'dragAutoScrollSpeed')
       windowSize = @getWindowSize()
+      sensitivity = _.result @options, 'dragScrollSensitivity'
 
-      greaterY = -> mouseY >= windowSize.y
-      greaterX = -> mouseX >= windowSize.x
-      lesserY = -> mouseY <= 0
-      lesserX = -> mouseX <= 0
+      greaterY = -> mouseY >= windowSize.y - sensitivity
+      greaterX = -> mouseX >= windowSize.x - sensitivity
+      lesserY = -> mouseY <= 0 + sensitivity
+      lesserX = -> mouseX <= 0 + sensitivity
     
     
       if greaterY()
