@@ -23,10 +23,19 @@ body {
   height: 300px;
   width: 300px;
   z-index: 100;
+  margin: 15px;
 }
 
 .ds-drag {
   background-color: #ccc;
+}
+
+.ds-drop {
+  background-color: #a00;
+}
+
+.ds-drop-hover {
+  background-color: #0a0;
 }
 
 #dropMe {
@@ -34,4 +43,6 @@ body {
   width: 200px;
   height: 200px;
   border: 1px solid #a0a;
+  margin: 15px;
+  margin-left: 200px;
 }
