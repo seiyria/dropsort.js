@@ -26,18 +26,7 @@ body {
   margin: 15px;
 }
 
-.ds-drag {
-  background-color: #ccc;
-}
-
-.ds-drop {
-  background-color: #a00;
-}
-
-.ds-drop-hover {
-  background-color: #0a0;
-}
-
+*/
 #dropMe {
   position: relative;
   width: 200px;
@@ -45,4 +34,12 @@ body {
   border: 1px solid #a0a;
   margin: 15px;
   margin-left: 200px;
+}
+
+.sortable, .sortable li {
+  position: relative;
+}
+
+ul {
+  width: 50px;
 }

@@ -1,38 +1,4 @@
 
-class Action
-  constructor: (@type, @element) ->
-    @init()
-  
-  init: ->
-    touchEvents = ['touchstart', 'touchmove', 'touchend']
-    baseIgnoreEvents = ['click', 'drag']
-    @ignoreEvents = touchEvents.concat baseIgnoreEvents
-    
-  destroy: ->
-
-  on: (type, handler, target = @element) ->
-    type = "#{@type}#{type}" if not (type.indexOf @type is 0) or (type not in @ignoreEvents)
-    @off type if @[type]
-    
-    (target.addEventListener type, handler) if document.addEventListener
-    (target.attachEvent "on#{type}", handler) if document.attachEvent
-    console.error "Could not bind event #{type}" if not document.addEventListener or document.attachEvent
-    
-  off: (type, handler, target = @element) ->
-    type = "#{@type}#{type}" if not (type.indexOf @type is 0) or (type not in @ignoreEvents)
-    
-    (target.removeEventListener type, handler) if document.removedEventListener
-    (target.detachEvent "on#{type}", handler) if document.detachEvent
-    console.error "Could not unbind event #{type}" if not document.removeEventListener or document.detachEvent
-
-class DragAction extends Action
-  constructor: (@element) ->
-    super 'drag', @element
-
-class MouseAction extends Action
-  constructor: (@element) ->
-    super 'mouse', @element
-    
 class DropSort
   errorMsgs = 
     noElement: 'You have to specify an element to attach DropSort to'
@@ -42,11 +8,12 @@ class DropSort
     gridDimen: 'Your grid dimensions are invalid. They must be integers greater than 1'
     badHelper: 'You must specify a valid helper (it must be a function that returns a DOMElement, contain "clone" or "original")'
     noActions: 'You must specify an action (doDrag, doDrop, or doSort)'
+    badHolder: 'You must give a valid DOMElement as a sort placeholder'
     
   constructor: (@element, optionsSpecified = {}) ->
 
     throw new Error errorMsgs.noElement if not @element
-    throw new Error errorMsgs.staticPos if @getStyle(@element, 'position') is 'static'
+    throw new Error errorMsgs.staticPos if DOMHelper.getStyle(@element, 'position') is 'static'
     
     @options = _.defaults optionsSpecified,
     
@@ -108,11 +75,6 @@ class DropSort
       # is this drop target active?
       dropDisabled: no
       
-      # what class should I get while I'm hovered over?
-      # dropHoverClass: 'ds-drop-hover'
-      
-      ## TODO hover events (class, check for intersect)
-      
       # whether or not this can be dropped on. (element) -> bool
       canDropOn: (el) -> yes
       
@@ -128,17 +90,47 @@ class DropSort
       # what is the tolerance for being dropped in me? (supports fit, intersect*, pointer, touch)
       dropTolerance: 'pointer'
       
+      # what callback should happen when this is dropped?
       dropCallback: ->
+        
+      # what callback should happen while hovering over a drop target?
       dropHoverCallback: ->
+      
+      # should this element be a sortable container?
+      doSort: no
+      
+      # the selector used to determine which children of a DropSort sortable
+      # should be selected when doing sorts
+      sortSelector: '*'
+      
+      # the rubber-banding function called after dropping an item that is 
+      # part of a sortable
+      sortRubberBand: (dropSort) ->
+        dropSort.element.style.left = "auto"
+        dropSort.element.style.top = "auto"
+        dropSort.element.style.position = "relative"
+        
+      # the placeholder for the item being placed in a sortable.
+      # required. by default, it is an empty element with the same tag
+      # as the dragged item
+      sortPlaceholder: =>
+        document.createElement @element.tagName
+        
+      # the orientation of the sortable. if not vertical, horizontal assumed
+      # can be a string (vertical, horizontal/other), or fn -> string
+      sortOrientation: "vertical"
 
     do @doInitialVariableCalculations
     do @addBinding
-    @mouse = new MouseAction @element
 
-    if _.result @options, 'doDrop'
+    if _.result @options, 'doSort'
+      do @setupSort
+      
+    else if _.result @options, 'doDrop'
       do @setupDrop
       
     else if _.result @options, 'doDrag'
+      @mouse = new MouseAction @element
       do @setupDrag
       
     else
@@ -160,7 +152,7 @@ class DropSort
     
   # Set DropSort.element's zIndex as a property on itself so we can modify it when dragging
   setBaseZIndex: ->
-    @element._zIndex = @getStyle @element, 'z-index'
+    @element._zIndex = DOMHelper.getStyle @element, 'z-index'
 
   # Set the default axis if one doesn't exist
   setAxis: ->
@@ -175,7 +167,7 @@ class DropSort
     if not grid
       grid = [1, 1]
       
-    if grid[0] < 1 or not @divisibleBy grid[0] or grid[1] < 1 or not @divisibleBy grid[1]
+    if grid[0] < 1 or not MathHelper.divisibleBy grid[0] or grid[1] < 1 or not MathHelper.divisibleBy grid[1]
       throw new Error errorMsgs.gridDimen
       
     @options.dragGrid = grid
@@ -189,7 +181,7 @@ class DropSort
       type = @element.parentNode
       
     if  _.isElement type
-      @options.dragContainerBox = @getBoundingBoxFor type
+      @options.dragContainerBox = DOMHelper.getBoundingBoxFor type
       
     else
       throw new Error errorMsgs.invalidEl
@@ -213,14 +205,13 @@ class DropSort
     newY = offsetY + @dragStartPosition._yDiff
 
     if (_.result @options, 'dragAutoScroll') and (autoScrollSpeed = _.result @options, 'dragAutoScrollSpeed')
-      windowSize = @getWindowSize()
+      windowSize = DOMHelper.getWindowSize()
       sensitivity = _.result @options, 'dragScrollSensitivity'
 
       greaterY = -> mouseY >= windowSize.y - sensitivity
       greaterX = -> mouseX >= windowSize.x - sensitivity
       lesserY = -> mouseY <= 0 + sensitivity
       lesserX = -> mouseX <= 0 + sensitivity
-    
     
       if greaterY()
         window.scrollIntervalGreaterY = setInterval ->
@@ -254,7 +245,6 @@ class DropSort
       else 
         clearInterval window.scrollIntervalLesserX
      
-    
     boundingBox = @options.dragContainerBox
 
     containment = 
@@ -267,14 +257,14 @@ class DropSort
       
     newElementBox = @isElementContainedChangePos containment, boundingBox
     
-    elementBoundingBox = @getBoundingBoxFor repositionMe
+    elementBoundingBox = DOMHelper.getBoundingBoxFor repositionMe
     didMove = no
 
-    if (@divisibleBy newElementBox.left, grid[0]) and axis in ['both', 'x']
+    if (MathHelper.divisibleBy newElementBox.left, grid[0]) and axis in ['both', 'x']
       repositionMe.style.left = "#{newElementBox.left}px"
       didMove = yes
       
-    if (@divisibleBy newElementBox.top, grid[1]) and axis in ['both', 'y']
+    if (MathHelper.divisibleBy newElementBox.top, grid[1]) and axis in ['both', 'y']
       repositionMe.style.top = "#{newElementBox.top}px" 
       didMove = yes
       
@@ -283,12 +273,26 @@ class DropSort
       yDiff = newElementBox.top - elementBoundingBox.top
       
       _.each (@figureOutAnchors repositionMe, @options.dragAnchorElements), (element) =>
-        box = @getBoundingBoxFor element
+        box = DOMHelper.getBoundingBoxFor element
         element.style.left = "#{box.left+xDiff}px"
         element.style.top = "#{box.top+yDiff}px"
+        
+    DOMHelper.stopEvent event
     
-    @stopEvent event
-    
+  # Prepare an element for being a sortable container
+  setupSort: ->
+    @dropZones.push @
+    @sortZones.push @
+    @containedElements = []
+    @_dropSorts = []
+    @isSort = true
+
+    childrenNodes = @element.querySelectorAll _.result @options, 'sortSelector'
+    _.each childrenNodes, (node) =>
+      dropSort = new DropSort node, dragHelper: "clone"
+      @_dropSorts.push dropSort
+      dropSort._sortable = @
+      
   # Prepare an element for being a dropzone
   setupDrop: ->
     @dropZones.push @
@@ -303,24 +307,34 @@ class DropSort
       return if _.result @options, 'dragDisabled'
       
       handle = _.result @options, 'dragHandleClassName'
-      return if handle and ((@getClasses @getEventTarget e).indexOf handle) is -1
+      return if handle and ((DOMHelper.getClasses DOMHelper.getEventTarget e).indexOf handle) is -1
         
-      @stopEvent e
+      DOMHelper.stopEvent e
       
       @removeElementFromDropzones()
       
       @element.style.zIndex = _.result @options, 'dragZIndex'
-      @addClass @element, _.result @options, 'dragClass'
+      DOMHelper.addClass @element, _.result @options, 'dragClass'
       @dragging = true
       @dragElement = @getDragItem e
-      @dragStartPosition = @getBoundingBoxFor @element
+      @dragStartPosition = DOMHelper.getBoundingBoxFor @element
       @dragStartPosition._origMouseX = e.pageX
       @dragStartPosition._origMouseY = e.pageY
+      
+      if @_sortable
+        
+        @_sortPlaceholder = _.result @options, 'sortPlaceholder'
+        
+        if not _.isElement @_sortPlaceholder
+          throw new Error errorMsgs.badHolder
+          
+        @element.style._display = @element.style.display
+        @element.style.display = 'none'
       
     @mouse.on 'up', @_up = (e) =>
       return if not @dragging # don't trigger other DropSorts
       @element.style.zIndex = @element._zIndex
-      @removeClass @element, _.result @options, 'dragClass'
+      DOMHelper.removeClass @element, _.result @options, 'dragClass'
       @dragging = false
       delete @dragStartPosition
       
@@ -330,7 +344,14 @@ class DropSort
         @element.style.top = @dragElement.style.top
       
       @handleDropZones e
+      
+      if @_sortable
+        @element.style.display = @element.style._display
+        @removePlaceholderFromSortzones()
+      
       @mouse.off 'move', @_move
+      
+      @_sortable.options.sortRubberBand @ if @_sortable
     , target
       
     @mouse.on 'move', @_move = (e) =>
@@ -340,6 +361,7 @@ class DropSort
                 (Math.abs @dragStartPosition._origMouseY-e.y) < minDragDistance
       @repositionItem e, @dragElement
       @handleDropZones e, callback='hover'
+      @handleSortZones e
     , target
     
   # Add the DropSort binding to the element
@@ -349,15 +371,7 @@ class DropSort
 
   # Get the item that should appear under the cursor
   getDragItem: (e) ->
-    if (@options.dragHelper.indexOf "clone") isnt -1
-      clone = @element.cloneNode true
-      box = @getBoundingBoxFor @element
-      @element.parentNode.insertBefore clone, @element
-      @element.style.left = clone.style.left = box.offsetX+'px'
-      @element.style.top = clone.style.top = box.offsetY+'px'
-      @element.style.position = clone.style.position = 'absolute'
-      
-      return clone
+    return DOMHelper.clone @element if (@options.dragHelper.indexOf "clone") isnt -1
       
     return @element if (@options.dragHelper.indexOf "original") isnt -1
     
@@ -369,18 +383,18 @@ class DropSort
     callbacks =
       drop: (dropZone) =>
         newClassName =  _.result dropZone.options, 'dropClass'
-        (dropZone.addClass dropZone.element, newClassName) if not dropZone.hasClass dropZone.element, newClassName
+        (DOMHelper.addClass dropZone.element, newClassName) if not DOMHelper.hasClass dropZone.element, newClassName
         dropZone.containedElements.push @element
         @options.dropCallback?()
         
       hover: (dropZone) =>
         newClassName = _.result dropZone.options, 'dropHoverClass'
-        (dropZone.addClass dropZone.element, newClassName) if not dropZone.hasClass dropZone.element, newClassName
+        (DOMHelper.addClass dropZone.element, newClassName) if not DOMHelper.hasClass dropZone.element, newClassName
         @options.dropHoverCallback?()
         
     _(@dropZones)
       .each (dropZone) ->
-        dropZone.removeClass dropZone.element, _.result dropZone.options, 'dropHoverClass'
+        DOMHelper.removeClass dropZone.element, _.result dropZone.options, 'dropHoverClass'
       .reject (dropZone) =>
         (_.result dropZone.options, 'dropDisabled') or not dropZone.options.canDropOn @element
       .filter (dropZone) ->
@@ -389,18 +403,60 @@ class DropSort
         dropAccept = _.result dropZone.options, 'dropAccept'
         not dropAccept or _.contains (document.querySelectorAll dropAccept), @element
       .each callbacks[callback]
-  
+      
+  handleSortZones: (e) ->
+    _(@sortZones)
+      .filter (sortZone) ->
+        sortZone.doesIntersect sortZone.element, e
+      .each (sortZone) =>
+        
+        ## DO NOT REMOVE
+        ## if pointerEvents acts up, change this to display: none instead!
+        oldPointerEvents = @element.style.pointerEvents
+        @element.style.pointerEvents = 'none'
+        hoveringNode = document.elementFromPoint event.x,event.y
+        @element.style.pointerEvents = oldPointerEvents
+      
+        if (sortZone.element isnt hoveringNode) and 
+            (sortZone.element.contains hoveringNode) and 
+            (@_sortPlaceholder isnt hoveringNode) and
+            @doesIntersectTarget hoveringNode, @element
+
+          sortZone.element.removeChild @_sortPlaceholder if sortZone.element.contains @_sortPlaceholder
+          
+          orient = _.result @options, 'orientation'
+          
+          [useFunc, primaryArg] = DOMSpatialHelper.getHoveredItemHalf hoveringNode, e, orient
+          
+          #return if primaryArg.nodeType is 3
+          
+          #console.log primaryArg.nodeType, hoveringNode.nodeType, hoveringNode is primaryArg, hoveringNode.nextSibling is primaryArg, useFunc
+            
+          sortZone.element[useFunc] @_sortPlaceholder, primaryArg
+          
+          #oldEl = sortZone.element.removeChild @element
+          #sortZone.element[useFunc] oldEl, primaryArg
+          
   removeElementFromDropzones: ->
     _.each @dropZones, (dropZone) =>
       dropZone.containedElements = _.without dropZone.containedElements, @element
       newClassName =  _.result dropZone.options, 'dropClass'
-      @removeClass dropZone.element, newClassName if dropZone.containedElements.length is 0
+      DOMHelper.removeClass dropZone.element, newClassName if dropZone.containedElements.length is 0
+      
+  removePlaceholderFromSortzones: ->
+    _.each @sortZones, (sortZone) =>
+      if sortZone.element.contains @_sortPlaceholder
+        sortZone.element.insertBefore @element, @_sortPlaceholder
+        sortZone.element.removeChild @_sortPlaceholder
 
-  doesIntersect: (dropZone, event) ->
-    mode = _.result @options, 'dropTolerance'
-    target = @getEventTarget event
+  doesIntersect: (baseEl, event) ->
+    @doesIntersectTarget baseEl, DOMHelper.getEventTarget event
     
-    targetBox = @getBoundingBoxFor target
+  doesIntersectTarget: (baseEl, target) ->
+    
+    targetBox = DOMHelper.getBoundingBoxFor target
+    
+    mode = _.result @options, 'dropTolerance'
     mouseBox = 
       offsetX: event.clientX
       offsetY: event.clientY
@@ -408,7 +464,7 @@ class DropSort
       offsetHeight: 1
     
     getContained = (targetContainer) =>
-      @checkHowContainedIs targetContainer, @getBoundingBoxFor dropZone
+      @checkHowContainedIs targetContainer, DOMHelper.getBoundingBoxFor baseEl
     
     switch mode
       when 'fit' then return true if getContained(targetBox).pointsContained.length is 4
@@ -417,7 +473,8 @@ class DropSort
       when 'intersect' then #TODO
       
     return false
-
+    
+# check the actual containment vector of checkMe re: box
 DropSort::checkHowContainedIs = (checkMe, box) ->
   checkBox = 
     top: checkMe.offsetY
@@ -449,7 +506,7 @@ DropSort::checkHowContainedIs = (checkMe, box) ->
     bL: [checkBox.left, checkBox.bottom]
     
   for name,pt of points
-    containedSides.pointsContained.push pt if @pointInPolygon pt, polygon
+    containedSides.pointsContained.push pt if MathHelper.pointInPolygon pt, polygon
     
   containedSides.contain = "partial" if containedSides.pointsContained.length > 0
   containedSides.contain = "full" if containedSides.pointsContained.length is 4
@@ -462,10 +519,6 @@ DropSort::figureOutAnchors = (element, anchorOpt) ->
   anchors = document.querySelectorAll anchorOpt if _.isString anchorOpt
   anchors = anchorOpt if _.isArray anchorOpt
   anchors
-    
-# Check it num is divisible by divisor
-DropSort::divisibleBy = (num, divisor = 1) ->
-  num % divisor is 0
   
 # Check if element is contained by container, and if not, change its bounds so it is
 DropSort::isElementContainedChangePos = (element, container) -> 
@@ -484,125 +537,11 @@ DropSort::isElementContainedChangePos = (element, container) ->
     
   element
   
-# TODO convert to coffee
-DropSort::pointInPolygon = `function (point, vs) {
-    // ray-casting algorithm based on
-    // http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
-    
-    var x = point[0], y = point[1];
-    
-    var inside = false;
-    for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-        var xi = vs[i][0], yi = vs[i][1];
-        var xj = vs[j][0], yj = vs[j][1];
-        
-        var intersect = ((yi > y) != (yj > y))
-            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
-    }
-    
-    return inside;
-}`
-
-#check if element is contained
-DropSort::isElementContainedBy = (element, container) ->
-  (container.bottom and element.bottom <= container.bottom) and
-  (container.right and element.right <= container.right) and
-  (container.left and element.left >= container.left) and
-  (container.top and element.top >= container.top)
-  
-# Get the window size 
-DropSort::getWindowSize = ->
-  de = document.documentElement
-  body = document.getElementsByTagName('body')[0]
-  {
-    x: window.innerWidth or de.clientWidth or body.clientWidth
-    y: window.innerHeight or de.clientHeight or body.clientHeight
-  }
-
-# Get a style property from an element
-DropSort::getStyle = (elem, prop) ->
-  return elem.currentStyle[prop] if elem.currentStyle
-  return window.getComputedStyle(elem).getPropertyValue prop if window.getComputedStyle
-  return elem.style[prop] if elem.style
-
-# Get the bounding box for an element
-DropSort::getBoundingBoxFor = (elem) ->
-  base =
-    offsetX: 0
-    offsetY: 0
-    offsetHeight: elem.offsetHeight
-    offsetWidth: elem.offsetWidth
-    bottom: parseFloat @getStyle elem, 'bottom'
-    right: parseFloat @getStyle elem, 'right'
-    left: parseFloat @getStyle elem, 'left'
-    top: parseFloat @getStyle elem, 'top'
-  
-  base.bottomCalc = elem.offsetHeight
-  base.rightCalc = elem.offsetWidth
-  
-  for attr, val of base
-    base[attr] = 0 if _.isNaN val
-    
-  if elem.offsetParent
-    add = ->
-      base.offsetX += elem.offsetLeft
-      base.offsetY += elem.offsetTop
-    add()
-    add() while elem = elem.offsetParent
-  
-  base
-  
 # array of all droppable zones managed by DropSort
 DropSort::dropZones = []
-  
-# map of _.uniqueId to DOMElement
-#DropSort::bindings = {}
 
-# stop an event by whatever means it has available
-DropSort::stopEvent = (event) ->
-  event.preventDefault() if event.preventDefault
-  event.stopPropagation() if event.stopPropagation
-  event.returnvalue = false
-  
-DropSort::hasClass = (el, className) ->
-  (@getClasses(el).indexOf className) isnt -1
-  
-# Get all classes for el
-DropSort::getClasses = (el) ->
-  el.className
-
-# add a class to an element
-DropSort::addClass = (el, newClass) ->
-  if el.classList
-    el.classList.add newClass
-  else
-    el.className += " #{newClass}"
-  
-# remove a class from an element
-DropSort::removeClass = (el, oldClass) ->
-  if el.classList
-    el.classList.remove oldClass
-  else
-    el.className = el.className.replace new RegExp('(^|\\b)' + oldClass.split(' ').join('|') + '(\\b|$)', 'gi'), ' '
-
-# get the current target of the element
-DropSort::getEventTarget = (event) ->
-  target = event.target
-  target = event.srcElement if event.srcElement
-  target = target.parentNode if target.nodeType is 3
-  
-  target
-  
-# get the current position of the item on the page
-DropSort::getPosition = (event) ->
-  return {x: event.targetTouches[0].pageX, y: event.targetTouches[0].pageY} if event.targetTouches
-  return {x: event.pageX, y: event.pageY} if event.pageX or event.pageY
-  
-  db = document.body
-  de = document.documentElement
-  return {x: event.clientX + db.scrollLeft + de.scrollLeft, y: event.pageY + db.scrollTop + de.scrollTop} if event.clientX or event.clientY
-  {x: 0, y: 0}
+# array of all sortable instances managed by DropSort
+DropSort::sortZones = []
 
 # Export it to the appropriate place
 root = exports ? @
