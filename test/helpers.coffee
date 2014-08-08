@@ -1,12 +1,39 @@
 
 class DOMHelper
+
+  @elementsFromPoint = (x,y) ->
+    els = []
+    pes = []
+    
+    while 1
+      curObj = document.elementFromPoint x,y
+      break if not curObj or curObj is document.documentElement
+      
+      els.push curObj
+      pes.push curObj.style.pointerEvents
+      curObj.style.pointerEvents = 'none'
+      
+    _.each els, (currentEl, i) ->
+      currentEl.style.pointerEvents = pes[i]
+      
+    els
+  
+  @setMatchesFunction = (el) ->
+    el.matches = 
+      el.matches or 
+      el.matchesSelector or
+      el.webkitMatchesSelector or
+      el.mozMatchesSelector or 
+      el.oMatchesSelector or
+      el.msMatchesSelector
     
   @clone = (element) ->
     clone = element.cloneNode true
     box = @getBoundingBoxFor element
     element.parentNode.insertBefore clone, element
-    element.style.left = clone.style.left = box.offsetX+'px'
-    element.style.top = clone.style.top = box.offsetY+'px'
+    parentBox = @getBoundingBoxFor clone.parentNode
+    element.style.left = clone.style.left = "#{box.offsetX-parentBox.offsetX}px"
+    element.style.top = clone.style.top = "#{box.offsetY-parentBox.offsetY}px"
     element.style.position = clone.style.position = 'absolute'
     clone
     
@@ -90,13 +117,16 @@ class DOMHelper
 class DOMSpatialHelper
 
   @getHoveredItemHalf = (hoveredNode, event, orientation = "vertical") ->
-    compare = if orientation is "vertical" then coord: 'offsetY', width: 'offsetHeight' else coord: 'offsetX', width: 'offsetWidth'
+    compare = 
+      if orientation is "vertical" then coord: 'offsetY', width: 'offsetHeight' 
+      else coord: 'offsetX', width: 'offsetWidth'
 
     box = DOMHelper.getBoundingBoxFor hoveredNode
-    funcCall = if @isLastElement hoveredNode then "appendChild" else "insertBefore"
+    isAtLeft = box[compare.coord] <= event.x <= box[compare.coord]+box[compare.width]
+    
+    funcCall = if (@isLastElement hoveredNode) and (not isAtLeft) then "appendChild" else "insertBefore"
     insertArg = 
-      if @isFirstElement hoveredNode then hoveredNode 
-      else if box[compare.coord] <= event.x <= box[compare.coord]+box[compare.width] then hoveredNode 
+      if isAtLeft or @isFirstElement hoveredNode then hoveredNode 
       else hoveredNode.nextSibling
       
     [funcCall, insertArg]

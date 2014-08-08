@@ -17,8 +17,10 @@ class DropSort
     
     @options = _.defaults optionsSpecified,
     
+      # bool or fn -> bool
       doDrag: true
     
+      # bool or fn -> bool
       touchEnabled: 'ontouchstart' in window
       
       # string or function
@@ -88,7 +90,7 @@ class DropSort
       dropAccept: ''
       
       # what is the tolerance for being dropped in me? (supports fit, intersect*, pointer, touch)
-      dropTolerance: 'pointer'
+      dropTolerance: 'touch'
       
       # what callback should happen when this is dropped?
       dropCallback: ->
@@ -119,6 +121,15 @@ class DropSort
       # the orientation of the sortable. if not vertical, horizontal assumed
       # can be a string (vertical, horizontal/other), or fn -> string
       sortOrientation: "vertical"
+      
+      # whether or not to allow re-sorting
+      # this will not stop dragging.
+      # either a bool or fn -> bool
+      sortDisabled: no
+      
+      # what elements should this sortable accept?
+      # either a selector, or a fn -> selector
+      sortAcceptSelector: "*"
 
     do @doInitialVariableCalculations
     do @addBinding
@@ -138,11 +149,15 @@ class DropSort
     
   # Set up the options object if it is missing properties
   doInitialVariableCalculations: ->
-    @getContainerBoundingBox()
-    @checkGrid()
-    @setAxis()
-    @setBaseZIndex()
-    @checkIfHelperIsValid()
+    do @getContainerBoundingBox
+    do @checkGrid
+    do @setAxis
+    do @setBaseZIndex
+    do @checkIfHelperIsValid
+    do @setupElement
+    
+  setupElement: ->
+    DOMHelper.setMatchesFunction @element
     
   # Check if the helper is valid (ie, contains 'clone' or 'original' or is a DOMElement)
   checkIfHelperIsValid: ->
@@ -289,7 +304,7 @@ class DropSort
 
     childrenNodes = @element.querySelectorAll _.result @options, 'sortSelector'
     _.each childrenNodes, (node) =>
-      dropSort = new DropSort node, dragHelper: "clone"
+      dropSort = new DropSort node, dragHelper: "clone", dropTolerance: "pointer"
       @_dropSorts.push dropSort
       dropSort._sortable = @
       
@@ -347,7 +362,7 @@ class DropSort
       
       if @_sortable
         @element.style.display = @element.style._display
-        @removePlaceholderFromSortzones()
+        @finishSortDrop()
       
       @mouse.off 'move', @_move
       
@@ -371,6 +386,7 @@ class DropSort
 
   # Get the item that should appear under the cursor
   getDragItem: (e) ->
+    #console.log e, DOMHelper.getBoundingBoxFor DOMHelper.clone @element
     return DOMHelper.clone @element if (@options.dragHelper.indexOf "clone") isnt -1
       
     return @element if (@options.dragHelper.indexOf "original") isnt -1
@@ -393,29 +409,44 @@ class DropSort
         @options.dropHoverCallback?()
         
     _(@dropZones)
+      .reject (dropZone) ->
+        dropZone.isSort
+        
       .each (dropZone) ->
         DOMHelper.removeClass dropZone.element, _.result dropZone.options, 'dropHoverClass'
+        
       .reject (dropZone) =>
         (_.result dropZone.options, 'dropDisabled') or not dropZone.options.canDropOn @element
+        
       .filter (dropZone) ->
         dropZone.doesIntersect dropZone.element, e
+        
       .filter (dropZone) =>
         dropAccept = _.result dropZone.options, 'dropAccept'
         not dropAccept or _.contains (document.querySelectorAll dropAccept), @element
+        
       .each callbacks[callback]
       
-  handleSortZones: (e) ->
+  handleSortZones: (event) ->
     _(@sortZones)
       .filter (sortZone) ->
-        sortZone.doesIntersect sortZone.element, e
+        sortZone.doesIntersect sortZone.element, event
+        
+      .reject (sortZone) ->
+        _.result sortZone.options, 'sortDisabled'
+        
+      .filter (sortZone) =>
+        selector = _.result sortZone.options, 'sortAcceptSelector'
+        sortZone is @element._sortable or @element.matches selector
+        
       .each (sortZone) =>
         
         ## DO NOT REMOVE
         ## if pointerEvents acts up, change this to display: none instead!
-        oldPointerEvents = @element.style.pointerEvents
-        @element.style.pointerEvents = 'none'
+        oldPointerEvents = @dragElement.style.display
+        @dragElement.style.display = 'none'
         hoveringNode = document.elementFromPoint event.x,event.y
-        @element.style.pointerEvents = oldPointerEvents
+        @dragElement.style.display = oldPointerEvents
       
         if (sortZone.element isnt hoveringNode) and 
             (sortZone.element.contains hoveringNode) and 
@@ -426,16 +457,9 @@ class DropSort
           
           orient = _.result @options, 'orientation'
           
-          [useFunc, primaryArg] = DOMSpatialHelper.getHoveredItemHalf hoveringNode, e, orient
-          
-          #return if primaryArg.nodeType is 3
-          
-          #console.log primaryArg.nodeType, hoveringNode.nodeType, hoveringNode is primaryArg, hoveringNode.nextSibling is primaryArg, useFunc
-            
+          [useFunc, primaryArg] = DOMSpatialHelper.getHoveredItemHalf hoveringNode, event, orient
+
           sortZone.element[useFunc] @_sortPlaceholder, primaryArg
-          
-          #oldEl = sortZone.element.removeChild @element
-          #sortZone.element[useFunc] oldEl, primaryArg
           
   removeElementFromDropzones: ->
     _.each @dropZones, (dropZone) =>
@@ -443,11 +467,12 @@ class DropSort
       newClassName =  _.result dropZone.options, 'dropClass'
       DOMHelper.removeClass dropZone.element, newClassName if dropZone.containedElements.length is 0
       
-  removePlaceholderFromSortzones: ->
+  finishSortDrop: ->
     _.each @sortZones, (sortZone) =>
       if sortZone.element.contains @_sortPlaceholder
         sortZone.element.insertBefore @element, @_sortPlaceholder
         sortZone.element.removeChild @_sortPlaceholder
+        @element._sortable = sortZone
 
   doesIntersect: (baseEl, event) ->
     @doesIntersectTarget baseEl, DOMHelper.getEventTarget event
@@ -511,7 +536,7 @@ DropSort::checkHowContainedIs = (checkMe, box) ->
   containedSides.contain = "partial" if containedSides.pointsContained.length > 0
   containedSides.contain = "full" if containedSides.pointsContained.length is 4
   containedSides
-      
+                    
 # Get all anchors for an element
 DropSort::figureOutAnchors = (element, anchorOpt) ->
   anchors = []
