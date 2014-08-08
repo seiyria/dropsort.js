@@ -26,7 +26,6 @@ body {
   margin: 15px;
 }
 
-*/
 #dropMe {
   position: relative;
   width: 200px;
@@ -42,4 +41,12 @@ body {
 
 ul {
   width: 50px;
+}
+
+.ds-drop {
+  background-color: #a4a;
+}
+
+.ds-drop-hover {
+  background-color: #ccc;
 }
