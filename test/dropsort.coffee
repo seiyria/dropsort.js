@@ -9,11 +9,16 @@ class DropSort
     badHelper: 'You must specify a valid helper (it must be a function that returns a DOMElement, contain "clone" or "original")'
     noActions: 'You must specify an action (doDrag, doDrop, or doSort)'
     badHolder: 'You must give a valid DOMElement as a sort placeholder'
+    isNotSort: 'This function only works on a sortable'
+    noSorting: 'This function only works on a descendant of a sortable'
+    poorIndex: 'You have to give a valid DropSort or an index to use when doing range selection'
     
   constructor: (@element, optionsSpecified = {}) ->
 
     throw new Error errorMsgs.noElement if not @element
     throw new Error errorMsgs.staticPos if DOMHelper.getStyle(@element, 'position') is 'static'
+    
+    @optionsCopy = _.clone optionsSpecified
     
     @options = _.defaults optionsSpecified,
     
@@ -39,6 +44,10 @@ class DropSort
       # does not currently work well with high numbers
       # it may work better if @element is manually repositioned after meeting minDragDistance
       minDragDistance: 0
+      
+      # initial delay to verify the mouse is still down before performing a drag
+      # this helps to keep the drag from happening on accidental clicks
+      dragDelay: 100
       
       # either original, clone, anchor, original anchor, clone anchor, function -> element
       dragHelper: "original anchor"
@@ -70,6 +79,9 @@ class DropSort
         right: null
         left: null
         top: null
+        
+      dragUpCallback: ->
+      dragStartCallback: ->
         
       # should this element be a drop target?
       doDrop: no
@@ -130,6 +142,13 @@ class DropSort
       # what elements should this sortable accept?
       # either a selector, or a fn -> selector
       sortAcceptSelector: "*"
+      
+      # required to be non-empty for multi-select
+      sortSelectedClass: "ds-selected"
+      
+      sortDragPlaceholder: ->
+      
+      sortElementClick: (sortZone, elementClicked, event) ->
 
     do @doInitialVariableCalculations
     do @addBinding
@@ -158,6 +177,8 @@ class DropSort
     
   setupElement: ->
     DOMHelper.setMatchesFunction @element
+    @element._dropSort = @
+    @element._dropSort._isSortSelected = no
     
   # Check if the helper is valid (ie, contains 'clone' or 'original' or is a DOMElement)
   checkIfHelperIsValid: ->
@@ -219,6 +240,7 @@ class DropSort
     newX = offsetX + @dragStartPosition._xDiff
     newY = offsetY + @dragStartPosition._yDiff
 
+    # autoscroll - currently broken
     if (_.result @options, 'dragAutoScroll') and (autoScrollSpeed = _.result @options, 'dragAutoScrollSpeed')
       windowSize = DOMHelper.getWindowSize()
       sensitivity = _.result @options, 'dragScrollSensitivity'
@@ -304,7 +326,16 @@ class DropSort
 
     childrenNodes = @element.querySelectorAll _.result @options, 'sortSelector'
     _.each childrenNodes, (node) =>
-      dropSort = new DropSort node, dragHelper: "clone", dropTolerance: "pointer"
+      
+      draggableSortItemOptions = 
+        dragHelper: 'clone'
+        dropTolerance: 'pointer'
+        doSort: no
+      
+      options = _.extend (_.clone @optionsCopy), draggableSortItemOptions
+
+      dropSort = new DropSort node, options
+        
       @_dropSorts.push dropSort
       dropSort._sortable = @
       
@@ -326,27 +357,40 @@ class DropSort
         
       DOMHelper.stopEvent e
       
-      @removeElementFromDropzones()
-      
-      @element.style.zIndex = _.result @options, 'dragZIndex'
-      DOMHelper.addClass @element, _.result @options, 'dragClass'
-      @dragging = true
-      @dragElement = @getDragItem e
-      @dragStartPosition = DOMHelper.getBoundingBoxFor @element
-      @dragStartPosition._origMouseX = e.pageX
-      @dragStartPosition._origMouseY = e.pageY
-      
-      if @_sortable
+      @_mouseDown = yes
+
+      setTimeout =>
+        if not @_mouseDown
+          @_sortable.options.sortElementClick @_sortable, @, e if @_sortable
+          return
         
-        @_sortPlaceholder = _.result @options, 'sortPlaceholder'
+        else
+          @select()
+      
+        @removeElementFromDropzones()
         
-        if not _.isElement @_sortPlaceholder
-          throw new Error errorMsgs.badHolder
+        @element.style.zIndex = _.result @options, 'dragZIndex'
+        DOMHelper.addClass @element, _.result @options, 'dragClass'
+        @dragging = true
+        @dragElement = @getDragItem e
+        @dragStartPosition = DOMHelper.getBoundingBoxFor @element
+        @dragStartPosition._origMouseX = e.pageX
+        @dragStartPosition._origMouseY = e.pageY
+        
+        if @_sortable
           
-        @element.style._display = @element.style.display
-        @element.style.display = 'none'
+          @_sortPlaceholder = _.result @options, 'sortPlaceholder'
+          
+          throw new Error errorMsgs.badHolder if not _.isElement @_sortPlaceholder
+        
+          @storeDisplay()
+        
+        do @options.dragStartCallback?.bind @
+          
+      , _.result @options, 'dragDelay'
       
     @mouse.on 'up', @_up = (e) =>
+      @_mouseDown = no
       return if not @dragging # don't trigger other DropSorts
       @element.style.zIndex = @element._zIndex
       DOMHelper.removeClass @element, _.result @options, 'dragClass'
@@ -361,8 +405,15 @@ class DropSort
       @handleDropZones e
       
       if @_sortable
-        @element.style.display = @element.style._display
+        @restoreDisplay()
         @finishSortDrop()
+        
+        @_sortable._dropSorts = _(@_sortable.element.childNodes)
+          .filter (el) -> not _.isUndefined el._dropSort?._isSortSelected
+          .map (el) -> el._dropSort
+          .value()
+        
+      do @options.dragUpCallback?.bind @
       
       @mouse.off 'move', @_move
       
@@ -386,7 +437,18 @@ class DropSort
 
   # Get the item that should appear under the cursor
   getDragItem: (e) ->
-    #console.log e, DOMHelper.getBoundingBoxFor DOMHelper.clone @element
+    if @_sortable
+      placeholderFunc = @_sortable.options.sortDragPlaceholder?.bind @_sortable
+      element = placeholderFunc()
+      
+      if _.isElement element
+        @element.parentNode.insertBefore element, @element
+        DOMHelper.movePositionProperties @element, element
+        return element
+        
+      else if not _.isUndefined element
+        console.error "sortDragPlaceholder: Not a real element, skipping this attempt and using 'clone' instead" if not _.isElement element
+    
     return DOMHelper.clone @element if (@options.dragHelper.indexOf "clone") isnt -1
       
     return @element if (@options.dragHelper.indexOf "original") isnt -1
@@ -469,11 +531,20 @@ class DropSort
       
   finishSortDrop: ->
     _.each @sortZones, (sortZone) =>
+      
+      # find the right sort zone
       if sortZone.element.contains @_sortPlaceholder
-        sortZone.element.insertBefore @element, @_sortPlaceholder
+        
+        selected = @_sortable.getSelected().reverse()
+        parent = @_sortPlaceholder
+        
+        while item = selected.shift()
+          sortZone.element.insertBefore item.element, parent
+          parent = item.element
+        
         sortZone.element.removeChild @_sortPlaceholder
         @element._sortable = sortZone
-
+        
   doesIntersect: (baseEl, event) ->
     @doesIntersectTarget baseEl, DOMHelper.getEventTarget event
     
@@ -498,6 +569,94 @@ class DropSort
       when 'intersect' then #TODO
       
     return false
+    
+  # call condition: descendant of sortable
+  toggle: ->
+    throw new Error errorMsgs.noSorting if not @_sortable
+    selectedClass = _.result @_sortable.options, 'sortSelectedClass'
+    
+    if DOMHelper.hasClass @element, selectedClass
+      do @unselect
+    else
+      do @select
+      
+  # call condition: descendant of sortable
+  select: ->
+    throw new Error errorMsgs.noSorting if not @_sortable
+    @_isSortSelected = yes
+    selectedClass = _.result @_sortable.options, 'sortSelectedClass'
+    DOMHelper.addClass @element, selectedClass
+    
+  # call condition: descendant of sortable
+  unselect: ->
+    throw new Error errorMsgs.noSorting if not @_sortable
+    @_isSortSelected = no
+    selectedClass = _.result @_sortable.options, 'sortSelectedClass'
+    DOMHelper.removeClass @element, selectedClass
+      
+  # call condition: descendant of sortable
+  isSelected: ->
+    throw new Error errorMsgs.noSorting if not @_sortable
+    @_isSortSelected
+    
+  storeDisplay: ->
+    throw new Error errorMsgs.noSorting if not @_sortable
+    @element.style._display = @element.style.display
+    
+  hideDisplay: ->
+    throw new Error errorMsgs.noSorting if not @_sortable
+    @element.style.display = 'none'
+    
+  restoreDisplay: ->
+    throw new Error errorMsgs.noSorting if not @_sortable
+    @element.style.display = @element.style._display
+    
+  # call condition: sortable
+  countSelected: ->
+    throw new Error errorMsgs.isNotSort if not @isSort
+    @getSelected().length
+    
+  # call condition: sortable
+  getSelected: ->
+    throw new Error errorMsgs.isNotSort if not @isSort
+    _.filter @_dropSorts, (draggable) -> draggable._isSortSelected
+    
+  unselectAll: ->
+    do @unselectRange
+    
+  selectAll: ->
+    do @selectRange
+    
+  getChildrenRange: (start = 0, finish) ->
+    throw new Error errorMsgs.isNotSort if not @isSort
+    
+    [first, ..., last] = @_dropSorts
+    
+    # pull them out of the array if we're given numerical indexes
+    if not _.isNumber start
+      index = @_dropSorts.indexOf start
+      throw new Error errorMsgs.poorIndex if index is -1
+      start = index
+      
+    if _.isUndefined finish
+      finish = @_dropSorts.indexOf last
+      
+    if not _.isNumber finish
+      index = @_dropSorts.indexOf start
+      throw new Error errorMsgs.poorIndex if index is -1
+      start = index
+      
+    @_dropSorts[start..finish]
+
+  # call condition: sortable
+  selectRange: (start = 0, finish) ->
+    _.each (@getChildrenRange start, finish), (dropSort) -> dropSort.select()
+    
+  unselectRange: (start = 0, finish) ->
+    _.each (@getChildrenRange start, finish), (dropSort) -> dropSort.unselect()
+    
+  toggleRange: (start = 0, finish) ->
+    _.each (@getChildrenRange start, finish), (dropSort) -> dropSort.toggle()
     
 # check the actual containment vector of checkMe re: box
 DropSort::checkHowContainedIs = (checkMe, box) ->

@@ -29,13 +29,16 @@ class DOMHelper
     
   @clone = (element) ->
     clone = element.cloneNode true
-    box = @getBoundingBoxFor element
     element.parentNode.insertBefore clone, element
-    parentBox = @getBoundingBoxFor clone.parentNode
-    element.style.left = clone.style.left = "#{box.offsetX-parentBox.offsetX}px"
-    element.style.top = clone.style.top = "#{box.offsetY-parentBox.offsetY}px"
-    element.style.position = clone.style.position = 'absolute'
-    clone
+    @movePositionProperties element, clone
+
+  @movePositionProperties = (baseElement, toElement) ->
+    box = @getBoundingBoxFor baseElement
+    parentBox = @getBoundingBoxFor toElement.parentNode
+    baseElement.style.left = toElement.style.left = "#{box.offsetX-parentBox.offsetX}px"
+    baseElement.style.top = toElement.style.top = "#{box.offsetY-parentBox.offsetY}px"
+    baseElement.style.position = toElement.style.position = 'absolute'
+    toElement
     
   # Get the bounding box for an element
   @getBoundingBoxFor = (elem) ->

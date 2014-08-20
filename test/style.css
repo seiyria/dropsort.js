@@ -37,10 +37,15 @@ body {
 
 .sortable, .sortable li {
   position: relative;
+  width: 300px;
 }
 
 ul {
   width: 50px;
+}
+
+.ds-selected {
+  background-color: #c0a;
 }
 
 .ds-drop {
