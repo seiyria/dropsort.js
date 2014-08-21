@@ -1,23 +1,8 @@
 
 class DOMHelper
-
-  @elementsFromPoint = (x,y) ->
-    els = []
-    pes = []
-    
-    while 1
-      curObj = document.elementFromPoint x,y
-      break if not curObj or curObj is document.documentElement
-      
-      els.push curObj
-      pes.push curObj.style.pointerEvents
-      curObj.style.pointerEvents = 'none'
-      
-    _.each els, (currentEl, i) ->
-      currentEl.style.pointerEvents = pes[i]
-      
-    els
   
+  # get the matching function for the current browser
+  # if none exists then this won't work
   @setMatchesFunction = (el) ->
     el.matches = 
       el.matches or 
@@ -27,11 +12,14 @@ class DOMHelper
       el.oMatchesSelector or
       el.msMatchesSelector
     
+  # clone an element
   @clone = (element) ->
     clone = element.cloneNode true
     element.parentNode.insertBefore clone, element
     @movePositionProperties element, clone
 
+  # set up the positional properties between an element and another element
+  # handles top, left, and position='absolute'
   @movePositionProperties = (baseElement, toElement) ->
     box = @getBoundingBoxFor baseElement
     parentBox = @getBoundingBoxFor toElement.parentNode
@@ -96,6 +84,7 @@ class DOMHelper
       y: window.innerHeight or de.clientHeight or body.clientHeight
     }
   
+  # check if el has className
   @hasClass = (el, className) ->
     (@getClasses(el).indexOf className) isnt -1
     
@@ -119,6 +108,8 @@ class DOMHelper
       
 class DOMSpatialHelper
 
+  # check which half of the item is covered
+  # this is used to determine which way to go between a horizontal and vertical list
   @getHoveredItemHalf = (hoveredNode, event, orientation = "vertical") ->
     compare = 
       if orientation is "vertical" then coord: 'offsetY', width: 'offsetHeight' 
@@ -134,11 +125,13 @@ class DOMSpatialHelper
       
     [funcCall, insertArg]
     
-  @isLastElement = (node) ->
-    (Array.prototype.indexOf.call node.parentNode.children, node) is node.parentNode.children.length-1
-    
+  # check if this is the first child in the parents children
   @isFirstElement = (node) ->
     (Array.prototype.indexOf.call node.parentNode.children, node) is 0
+    
+  # check if this is the last child in the parents children
+  @isLastElement = (node) ->
+    (Array.prototype.indexOf.call node.parentNode.children, node) is node.parentNode.children.length-1
 
 class MathHelper
 

@@ -11,8 +11,6 @@ x = new DropSort node
 node = document.getElementById "dropMe"
 x = new DropSort node, doDrop: yes
 
-#x = new DropSort document.getElementById 'dragMeAlso'
-
 sortClickHandler = (sortable, element, event) ->
   [ctrl, shift] = [event.ctrlKey, event.shiftKey]
   
@@ -44,12 +42,13 @@ countingDOMHelper = ->
   el.innerText = "#{numberSelected} items selected"
   if numberSelected > 1 then el
   
-dropCallback = ->
-  _.each @_sortable.getSelected(), (dropSort) ->
+dropCallback = (currentlySelected) ->
+  _.each currentlySelected, (dropSort) ->
     dropSort.restoreDisplay()
     
-  @_sortable.unselectAll()
-  
+  _.each (_.difference @_sortable.getChildren(), currentlySelected), (dropSort) ->
+    dropSort.unselect() if dropSort._isSortSelected
+
 dragCallback = ->
   _.each @_sortable.getSelected(), (dropSort) ->
     dropSort.storeDisplay()

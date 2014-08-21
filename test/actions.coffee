@@ -3,13 +3,16 @@ class Action
   constructor: (@type, @element) ->
     @init()
   
+  # set up events for each type of action
   init: ->
     touchEvents = ['touchstart', 'touchmove', 'touchend']
     baseIgnoreEvents = ['click', 'drag']
     @ignoreEvents = touchEvents.concat baseIgnoreEvents
     
+  # nothing happens!
   destroy: ->
 
+  # abstract away adding an event listener
   on: (type, handler, target = @element) ->
     type = "#{@type}#{type}" if not (type.indexOf @type is 0) or (type not in @ignoreEvents)
     @off type if @[type]
@@ -18,6 +21,7 @@ class Action
     (target.attachEvent "on#{type}", handler) if document.attachEvent
     console.error "Could not bind event #{type}" if not document.addEventListener or document.attachEvent
     
+  # abstract away removing an event listener
   off: (type, handler, target = @element) ->
     type = "#{@type}#{type}" if not (type.indexOf @type is 0) or (type not in @ignoreEvents)
     
