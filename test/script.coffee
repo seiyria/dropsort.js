@@ -13,7 +13,7 @@ x = new DropSort node, doDrop: yes
 
 sortClickHandler = (sortable, element, event) ->
   [ctrl, shift] = [event.ctrlKey, event.shiftKey]
-  
+
   if (not ctrl) and (not shift)
     state = element._isSortSelected
     sortable.unselectAll()
@@ -21,7 +21,6 @@ sortClickHandler = (sortable, element, event) ->
 
   else if shift and sortable._lastSelected > -1 and sortable._dropSorts[sortable._lastSelected]._isSortSelected
     elIndex = sortable._dropSorts.indexOf element
-    
     sortable.selectRange sortable._lastSelected, elIndex if sortable._lastSelected < elIndex
     sortable.selectRange elIndex, sortable._lastSelected if sortable._lastSelected > elIndex
     

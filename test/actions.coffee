@@ -17,17 +17,25 @@ class Action
     type = "#{@type}#{type}" if not (type.indexOf @type is 0) or (type not in @ignoreEvents)
     @off type if @[type]
     
-    (target.addEventListener type, handler) if document.addEventListener
-    (target.attachEvent "on#{type}", handler) if document.attachEvent
-    console.error "Could not bind event #{type}" if not document.addEventListener or document.attachEvent
+    bound = no
+    if document.addEventListener
+      target.addEventListener type, handler
+      bound = yes
+      
+    (target.attachEvent "on#{type}", handler) if document.attachEvent and not bound
+    console.error "Could not bind event #{type}" if not document.addEventListener or not document.attachEvent
     
   # abstract away removing an event listener
   off: (type, handler, target = @element) ->
     type = "#{@type}#{type}" if not (type.indexOf @type is 0) or (type not in @ignoreEvents)
     
-    (target.removeEventListener type, handler) if document.removedEventListener
-    (target.detachEvent "on#{type}", handler) if document.detachEvent
-    console.error "Could not unbind event #{type}" if not document.removeEventListener or document.detachEvent
+    unbound = no
+    if document.removeEventListener
+      target.removeEventListener type, handler
+      unbound = yes
+      
+    (target.detachEvent "on#{type}", handler) if document.detachEvent and not unbound
+    console.error "Could not unbind event #{type}" if not document.removeEventListener or not document.detachEvent
 
 class DragAction extends Action
   constructor: (@element) ->

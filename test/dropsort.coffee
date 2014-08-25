@@ -380,26 +380,29 @@ class DropSort
       DOMHelper.stopEvent e
       
       @_mouseDown = yes
+      
+      eventCopy = {}
+      eventCopy[i] = e[i] for i of e #it's an IE joke, because you know, IE
 
       setTimeout =>
         # in this case we only clicked instead of held the mouse
         if not @_mouseDown
-          @_sortable.options.sortElementClick @_sortable, @, e if @_sortable
+          @_sortable.options.sortElementClick @_sortable, @, eventCopy if @_sortable
           return
         
         else if @_sortable
           @select()
-      
+          
         @removeElementFromDropzones()
         
         # prepare an element to be dragged
         @element.style.zIndex = _.result @options, 'dragZIndex'
         DOMHelper.addClass @element, _.result @options, 'dragClass'
         @dragging = true
-        @dragElement = @getDragItem e
+        @dragElement = @getDragItem eventCopy
         @dragStartPosition = DOMHelper.getBoundingBoxFor @element
-        @dragStartPosition._origMouseX = e.pageX
-        @dragStartPosition._origMouseY = e.pageY
+        @dragStartPosition._origMouseX = eventCopy.pageX
+        @dragStartPosition._origMouseY = eventCopy.pageY
         
         # build a placeholder element if the @_sortable instance has a custom one
         if @_sortable
@@ -546,13 +549,13 @@ class DropSort
         # if pointerEvents acts up, change this to display: none instead!
         oldPointerEvents = @dragElement.style.display
         @dragElement.style.display = 'none'
-        hoveringNode = document.elementFromPoint event.x,event.y
+        hoveringNode = document.elementFromPoint event.clientX,event.clientY
         @dragElement.style.display = oldPointerEvents
       
         if (sortZone.element isnt hoveringNode) and 
             (sortZone.element.contains hoveringNode) and 
             (@_sortPlaceholder isnt hoveringNode) and
-            @doesIntersectTarget hoveringNode, @element
+            @doesIntersectTarget hoveringNode, @element, event
 
           sortZone.element.removeChild @_sortPlaceholder if sortZone.element.contains @_sortPlaceholder
           
@@ -589,13 +592,13 @@ class DropSort
         
   # check if an element intersects with an event
   doesIntersect: (baseEl, event) ->
-    @doesIntersectTarget baseEl, DOMHelper.getEventTarget event
+    @doesIntersectTarget baseEl, (DOMHelper.getEventTarget event), event
     
   # check if an element intersects with a target element
-  doesIntersectTarget: (baseEl, target) ->
+  doesIntersectTarget: (baseEl, target, event) ->
     
     targetBox = DOMHelper.getBoundingBoxFor target
-    
+
     mode = _.result @options, 'dropTolerance'
     mouseBox = 
       offsetX: event.clientX
@@ -706,7 +709,7 @@ class DropSort
       index = @_dropSorts.indexOf start
       throw new Error errorMsgs.poorIndex if index is -1
       start = index
-      
+    
     @_dropSorts[start..finish]
 
   # call condition: sortable
