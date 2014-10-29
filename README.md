@@ -4,7 +4,7 @@ A drag/drop/sortable replacement to jQuery UI.
 
 Progress Plunk
 ==============
-This plunk will be continuously updated while testing new features: http://plnkr.co/edit/nGmCtZeWqaVuQARZtUw8?p=preview
+This plunk will be continuously updated while testing new features: http://plnkr.co/edit/vDHEzoEZwmkIGtKh91DR?p=preview
 Feel free to discuss any aspect of the plunk in an issue.
 
 Goals
